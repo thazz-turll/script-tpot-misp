@@ -8,12 +8,14 @@ All-in-one:
 - Map đúng MISP attribute types (md5/sha1/sha256, ip-src, domain, url, text)
 - Tạo Event mới mỗi ngày HOẶC chèn vào Event có sẵn
 - Đẩy attribute lên MISP kèm comment src_ip/timestamp
+
+Lưu ý fix tương thích PyMISP cũ:
+- Dùng dict cho PyMISP.add_attribute(event_id, attr_dict, pythonify=True)
 """
 
 import os
 import re
 import sys
-import json
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 
@@ -21,8 +23,7 @@ import pandas as pd
 from elasticsearch import Elasticsearch
 from pymisp import PyMISP, MISPEvent
 
-# ==== CONFIG ====
-# Có thể set qua ENV để khỏi lộ key trong code:
+# ==== CONFIG (có thể set qua ENV) ====
 ES_URL           = os.getenv("ES_URL", "http://192.168.1.100:64298")
 ES_INDEX         = os.getenv("ES_INDEX", "logstash-*")
 HOURS_LOOKBACK   = int(os.getenv("HOURS_LOOKBACK", "24"))
@@ -52,7 +53,19 @@ MD5_RE    = re.compile(r"^[a-fA-F0-9]{32}$")
 SHA1_RE   = re.compile(r"^[a-fA-F0-9]{40}$")
 SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 
-# ==== Helpers ====
+URL_RE    = re.compile(r"\bhttps?://[^\s\"']{4,}\b", re.IGNORECASE)
+HASH_RE   = re.compile(r"\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b")
+
+# Map base (non-hash)
+MAPPING_BASE = {
+    "ip":        ("ip-src", "Network activity", True),
+    "domain":    ("domain", "Network activity", True),
+    "url":       ("url",    "Network activity", True),
+    # credentials không đẩy sang IDS:
+    "credential":("text",   "Other",            False),
+}
+
+# ---------- Helpers ----------
 def first(v):
     if isinstance(v, list) and v:
         return v[0]
@@ -72,19 +85,7 @@ def classify_hash(h: str):
     if SHA256_RE.fullmatch(v): return "sha256"
     return None
 
-URL_RE  = re.compile(r"\bhttps?://[^\s\"']{4,}\b", re.IGNORECASE)
-HASH_RE = re.compile(r"\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b")
-
-# Map base (non-hash)
-MAPPING_BASE = {
-    "ip":        ("ip-src", "Network activity", True),
-    "domain":    ("domain", "Network activity", True),
-    "url":       ("url",    "Network activity", True),
-    # credentials không đẩy sang IDS:
-    "credential":("text",   "Other",            False),
-}
-
-# ==== 1) Lấy dữ liệu từ Elasticsearch & trích IoC ====
+# ---------- 1) Lấy dữ liệu từ Elasticsearch & trích IoC ----------
 def fetch_iocs_from_es():
     es = Elasticsearch([ES_URL])
     now = datetime.now(timezone.utc)
@@ -105,7 +106,6 @@ def fetch_iocs_from_es():
     resp = es.search(index=ES_INDEX, body=query)
 
     ioc_rows = []
-
     for hit in resp.get("hits", {}).get("hits", []):
         s = hit.get("_source", {})
         ts = first(s.get("@timestamp"))
@@ -163,7 +163,7 @@ def fetch_iocs_from_es():
     df = df[keep_cols].dropna(subset=["value","ioc_type"]).drop_duplicates(subset=["ioc_type","value"])
     return df
 
-# ==== 2) Map từng hàng sang attribute MISP ====
+# ---------- 2) Map từng hàng sang attribute MISP ----------
 def map_row_to_misp(row):
     ioc_type = str(row.get("ioc_type", "")).strip().lower()
     value    = str(row.get("value", "")).strip()
@@ -186,7 +186,7 @@ def map_row_to_misp(row):
 
     return None
 
-# ==== 3) Tạo hoặc lấy event ====
+# ---------- 3) Tạo hoặc lấy event ----------
 def create_daily_event_title():
     d = datetime.now(timezone.utc).date()
     return f"{EVENT_TITLE_PREFIX} - {d}"
@@ -198,19 +198,27 @@ def create_event(misp: PyMISP, title: str) -> str:
     ev.analysis        = EVENT_ANALYSIS
     ev.threat_level_id = THREAT_LEVEL_ID
 
-    # Add tags nếu có
-    for t in MISP_TAGS:
-        ev.add_tag(t)
-
     res = misp.add_event(ev)
-    # res có thể là dict hoặc MISPEvent; cố gắng lấy ID
+    # gắn tag cho event (nếu có)
+    if MISP_TAGS:
+        try:
+            event_id = res["Event"]["id"]
+        except Exception:
+            event_id = getattr(res, "id", None)
+        if event_id:
+            for t in MISP_TAGS:
+                try:
+                    misp.tag(event_id, t)
+                except Exception:
+                    pass
+
     try:
         return res["Event"]["id"]
     except Exception:
         try:
             return res.id
-        except Exception:
-            raise RuntimeError(f"Cannot parse event id from response: {type(res)} {res}")
+        except Exception as e:
+            raise RuntimeError(f"Cannot parse event id from response: {type(res)} {res}") from e
 
 def get_or_create_event_id(misp: PyMISP):
     if EVENT_MODE == "APPEND":
@@ -221,7 +229,7 @@ def get_or_create_event_id(misp: PyMISP):
     title = create_daily_event_title()
     return create_event(misp, title)
 
-# ==== 4) Push attributes ====
+# ---------- 4) Push attributes ----------
 def push_iocs_to_misp(misp: PyMISP, event_id: str, df: pd.DataFrame):
     added, skipped = 0, 0
 
@@ -229,13 +237,11 @@ def push_iocs_to_misp(misp: PyMISP, event_id: str, df: pd.DataFrame):
     existing_values = set()
     try:
         ev = misp.get_event(event_id, pythonify=True)
-        for a in ev.attributes or []:
-            # Chỉ cần chống trùng theo (type, value)
+        for a in getattr(ev, "attributes", []) or []:
             existing_values.add((a.type, a.value))
     except Exception:
         pass  # nếu fail, vẫn thêm bình thường
 
-    # Thêm từng dòng
     for _, row in df.iterrows():
         mapped = map_row_to_misp(row)
         if not mapped:
@@ -248,25 +254,25 @@ def push_iocs_to_misp(misp: PyMISP, event_id: str, df: pd.DataFrame):
             skipped += 1
             continue
 
+        # ---- FIX: dùng dict thay vì kwargs ----
+        attr = {
+            "type": misp_type,
+            "category": category,
+            "value": value,
+            "to_ids": to_ids,
+            "comment": comment,
+        }
         try:
-            misp.add_attribute(
-                event_id,
-                type=misp_type,
-                category=category,
-                value=value,
-                to_ids=to_ids,
-                comment=comment
-            )
+            misp.add_attribute(event_id, attr, pythonify=True)
             added += 1
             existing_values.add(key)
         except Exception as e:
-            # Không dừng hẳn; log ra stderr để xem
             print(f"[!] add_attribute failed for {misp_type}={value}: {e}", file=sys.stderr)
             skipped += 1
 
     return added, skipped
 
-# ==== main ====
+# ---------- main ----------
 def main():
     # 1) Lấy IoC
     df = fetch_iocs_from_es()
