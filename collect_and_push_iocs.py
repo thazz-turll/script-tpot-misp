@@ -1,53 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-ES -> (IP nguồn, credential, hash, domain, URL) -> MISP  [v3]
-- Đọc cấu hình từ .env (python-dotenv); BẮT BUỘC: ES_URL, MISP_URL, MISP_KEY
-- Ghi log xoay vòng (RotatingFileHandler)
-- Phân trang ES bằng search_after (không miss >5000 bản ghi)
-- Bắt hash có nhãn (ưu tiên) + fallback hash "trần" (giảm FPs)
-- Bắt thêm domain/URL + normalize
-- Auto disable IDS (to_ids=False) cho IP non-routable/private
-- Kiểm tra event khi APPEND; tạo event DAILY với tag từ ENV
-- Tương thích PyMISP cũ: add_attribute bằng dict
-
-.env gợi ý (đặt cùng thư mục script)
--------------------------------------
-# Elasticsearch
-ES_URL=http://<es_host>:<es_port>
-ES_INDEX=logstash-*
-HOURS_LOOKBACK=24
-
-# MISP
-MISP_URL=https://<misp_host>/
-MISP_KEY=<your_misp_api_key>
-MISP_VERIFY_SSL=false
-
-# Event
-EVENT_MODE=DAILY            # DAILY | APPEND
-# MISP_EVENT_ID=123         # bắt buộc khi APPEND
-MISP_DISTRIBUTION=0
-MISP_ANALYSIS=0
-MISP_TLP=2
-EVENT_TITLE_PREFIX=T-Pot IoC Collection
-MISP_TAGS=source:t-pot,tlp:amber
-
-# Hardening
-DISABLE_IDS_FOR_PRIVATE_IP=true
-TAG_PRIVATE_IP_ATTR=false
-PRIVATE_IP_TAG=scope:internal
-
-# Logging
-LOG_FILE=ioc_es_to_misp.log
-LOG_MAX_BYTES=1048576
-LOG_BACKUPS=3
-
-Cron gợi ý (mỗi 30 phút)
--------------------------
-# */30 * * * * /usr/bin/env bash -lc 'cd /path/to && /usr/bin/python3 es_to_misp_v3.py >> es_to_misp_cron.out 2>&1'
-"""
-
 import os
 import re
 import sys
