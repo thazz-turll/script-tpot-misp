@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
+from dateutil import parser
 
 import pandas as pd
 from elasticsearch import Elasticsearch
@@ -256,9 +257,20 @@ def map_row_to_misp(row):
     if not value:
         return None
 
-    ts  = str(row.get("timestamp", "")).strip()
-    src = str(row.get("src_ip", "")).strip()
-    comment = "; ".join([x for x in [f"src_ip={src}" if src else "", f"ts={ts}" if ts else ""] if x])
+ts_str = str(row.get("timestamp", "")).strip()
+ts_local_str = ts_str
+if ts_str:
+    try:
+        # Parse từ dạng ISO (UTC) và đổi sang giờ local của server
+        dt_utc = parser.isoparse(ts_str).replace(tzinfo=timezone.utc)
+        dt_local = dt_utc.astimezone()  # sẽ lấy timezone của server (VN nếu đã set)
+        ts_local_str = dt_local.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except Exception:
+        pass
+
+src = str(row.get("src_ip", "")).strip()
+comment = "; ".join([x for x in [f"src_ip={src}" if src else "", f"ts={ts_local_str}" if ts_local_str else ""] if x])
+
 
     if ioc_type == "hash":
         htype = classify_hash(value)
