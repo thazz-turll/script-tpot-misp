@@ -27,7 +27,8 @@ except Exception:
 ES_URL = os.getenv("ES_URL")                # bắt buộc
 MISP_URL = os.getenv("MISP_URL")            # bắt buộc
 MISP_KEY = os.getenv("MISP_KEY")            # bắt buộc
-
+EVENT_TITLE_PREFIX = os.getenv("EVENT_TITLE_PREFIX", "T-Pot IoC Collection")
+EVENT_TITLE_FORMAT = os.getenv("EVENT_TITLE_FORMAT", "%Y-%m-%d %H:%M")
 missing = []
 if not ES_URL:   missing.append("ES_URL")
 if not MISP_URL: missing.append("MISP_URL")
