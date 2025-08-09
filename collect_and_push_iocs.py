@@ -284,9 +284,9 @@ def map_row_to_misp(row):
 
 
 def create_daily_event_title():
-    # Dùng local timezone cho nhãn ngày dễ đọc
-    d = datetime.now().astimezone().date()
-    return f"{EVENT_TITLE_PREFIX} - {d}"
+    # Ví dụ: "T-Pot IoC Collection - 2025-08-09 14:00" nếu format có giờ
+    ts = datetime.now().astimezone().strftime(EVENT_TITLE_FORMAT)
+    return f"{EVENT_TITLE_PREFIX} - {ts}"
 
 
 def create_event(misp: PyMISP, title: str) -> str:
