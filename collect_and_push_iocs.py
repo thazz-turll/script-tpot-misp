@@ -194,12 +194,14 @@ ES_SOURCE_FIELDS = [
 
 def fetch_iocs_from_es():
     es = Elasticsearch([ES_URL])
+    # Sử dụng options() để đặt request_timeout và tránh cảnh báo deprecation
+    esq = es.options(request_timeout=60)
     now = datetime.now(timezone.utc)
     start = (now - relativedelta(hours=HOURS_LOOKBACK)).isoformat()
 
     base_query = {
         "_source": ES_SOURCE_FIELDS,
-        "sort": [{"@timestamp": "desc"}, {"_id": "desc"}],
+        "sort": [{"@timestamp": {"order": "desc", "unmapped_type": "date"}}],
         "query": {"range": {"@timestamp": {"gte": start}}}
     }
 
@@ -211,7 +213,9 @@ def fetch_iocs_from_es():
         body["size"] = page_size
         if search_after:
             body["search_after"] = search_after
-        resp = es.search(index=ES_INDEX, body=body, track_total_hits=False, request_timeout=60)
+        # Đưa track_total_hits vào body để tránh cảnh báo tham số trùng
+        body["track_total_hits"] = False
+        resp = esq.search(index=ES_INDEX, body=body)
         hits = resp.get("hits", {}).get("hits", [])
         if not hits:
             break
