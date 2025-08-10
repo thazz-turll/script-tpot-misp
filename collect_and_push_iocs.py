@@ -74,8 +74,14 @@ SHA1_RE   = re.compile(r"^[a-fA-F0-9]{40}$")
 SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 SHA512_RE = re.compile(r"^[a-fA-F0-9]{128}$")
 
-LABELED_HASH_RE = re.compile(r"(?i)\b(md5|sha1|sha256)\s*[:=]\s*([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})\b")
-BARE_HASH_RE    = re.compile(r"\b([A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})\b")
+# có nhãn: md5: <...>, sha1=..., sha256:..., sha512=...
+LABELED_HASH_RE = re.compile(
+    r"(?i)\b(md5|sha1|sha256|sha512)\s*[:=]\s*([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64}|[a-f0-9]{128})\b"
+)
+# không nhãn: chuỗi hex 32|40|64|128 ký tự
+BARE_HASH_RE = re.compile(
+    r"\b([A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64}|[A-Fa-f0-9]{128})\b"
+)
 URL_RE          = re.compile(r"\bhttps?://[^\s\"']{4,}\b", re.IGNORECASE)
 
 # Map base (non-hash)
