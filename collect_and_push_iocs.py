@@ -72,6 +72,7 @@ logger.addHandler(handler)
 MD5_RE    = re.compile(r"^[a-fA-F0-9]{32}$")
 SHA1_RE   = re.compile(r"^[a-fA-F0-9]{40}$")
 SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
+SHA512_RE = re.compile(r"^[a-fA-F0-9]{128}$")
 
 LABELED_HASH_RE = re.compile(r"(?i)\b(md5|sha1|sha256)\s*[:=]\s*([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})\b")
 BARE_HASH_RE    = re.compile(r"\b([A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})\b")
@@ -103,6 +104,7 @@ def classify_hash(h: str):
     if MD5_RE.fullmatch(v): return "md5"
     if SHA1_RE.fullmatch(v): return "sha1"
     if SHA256_RE.fullmatch(v): return "sha256"
+    if SHA512_RE.fullmatch(v): return "sha512"
     return None
 
 def is_non_routable_ip(ip_str: str) -> bool:
