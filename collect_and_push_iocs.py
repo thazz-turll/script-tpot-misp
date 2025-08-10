@@ -89,7 +89,7 @@ MAPPING_BASE = {
     "ip":        ("ip-src", "Network activity", True),   # to_ids có thể bị override nếu là private
     "domain":    ("domain", "Network activity", True),
     "url":       ("url",    "Network activity", True),
-    "credential":("credential",   "Other",            False),  # không đẩy sang IDS
+    "credential":("text",   "Other",            False),  # không đẩy sang IDS
 }
 
 # ===== Helpers =====
