@@ -292,27 +292,35 @@ def fetch_iocs_from_es():
 
 def map_row_to_misp(row):
     ioc_type = str(row.get("ioc_type", "")).strip().lower()
-    value    = str(row.get("value", "")).strip()
+    value = str(row.get("value", "")).strip()
     if not value:
         return None
 
-    ts_str = str(row.get("timestamp", "")).strip()
-    ts_local_str = ts_str
-    if ts_str:
-        try:
-            ts_str = str(row.get("timestamp", "")).strip()
+    # Chuẩn bị thông tin thời gian & comment an toàn
+    ts_str = str(row.get("timestamp", "") or "").strip()
+    ts_local_str = ""
+    utc_iso = ""
+    comment = ""
+
+    try:
+        if ts_str:
             ts_local_str = to_local_ts_str(ts_str)
             utc_iso = to_utc_iso(ts_str)
+    except Exception as e:
+        # Không để script chết vì lỗi parse timestamp
+        logger.debug(f"timestamp parse error: {e}")
 
-            src = str(row.get("src_ip", "")).strip()
-            comment_parts = []
-            if src: comment_parts.append(f"src_ip={src}")
-            if utc_iso: comment_parts.append(f"ts_utc={utc_iso}")
-            if ts_local_str: comment_parts.append(f"ts_local={ts_local_str}")
-            comment = "; ".join(comment_parts)
+    src = str(row.get("src_ip", "") or "").strip()
+    parts = []
+    if src:
+        parts.append(f"src_ip={src}")
+    if utc_iso:
+        parts.append(f"ts_utc={utc_iso}")
+    if ts_local_str:
+        parts.append(f"ts_local={ts_local_str}")
+    comment = "; ".join(parts) if parts else ""
 
-
-
+    # Mapping sang MISP attribute
     if ioc_type == "hash":
         htype = classify_hash(value)
         if not htype:
@@ -331,10 +339,12 @@ def map_row_to_misp(row):
         return (misp_type, category, to_ids, value, comment, False)
 
     if ioc_type == "credential":
+        # Giữ nguyên hành vi hiện tại: để push_iocs_to_misp xử lý fallback -> text
         misp_type, category, to_ids = MAPPING_BASE[ioc_type]
         return (misp_type, category, to_ids, value, comment, False)
 
     return None
+
 
 
 def create_daily_event_title():
