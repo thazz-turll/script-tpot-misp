@@ -84,7 +84,7 @@ MAPPING_BASE = {
     "ip":        ("ip-src", "Network activity", True),   # to_ids có thể bị override nếu là private
     "domain":    ("domain", "Network activity", True),
     "url":       ("url",    "Network activity", True),
-    "credential":("text",   "Other",            False),  # không đẩy sang IDS
+    "credential":("credential",   "Other",            False),  # không đẩy sang IDS
 }
 
 # ===== Helpers =====
@@ -414,10 +414,25 @@ def push_iocs_to_misp(misp: PyMISP, event_id: str, df: pd.DataFrame):
                     misp.tag(aobj.uuid, PRIVATE_IP_TAG)
                     logger.info(f"TAG attribute {aobj.uuid} with {PRIVATE_IP_TAG}")
                 except Exception:
-                    pass
+                     pass
         except Exception as e:
-            skipped += 1
-            logger.error(f"add_attribute failed: type={misp_type} value={value} err={e}")
+          # 🔁 Fallback: nếu type=credential không được MISP chấp nhận, thử lại bằng text
+            if misp_type == "credential":
+                try:
+                    attr_fallback = dict(attr)
+                    attr_fallback["type"] = "text"
+                    aobj = misp.add_attribute(event_id, attr_fallback, pythonify=True)
+                    added += 1
+                    existing.add(("text", value))
+                    logger.warning(f"credential not supported, fallback to text. value={value}")
+                except Exception as e2:
+                    skipped += 1
+                    logger.error(f"add_attribute failed (fallback) for credential value={value} err={e2}")
+            else:
+                 skipped += 1
+                 logger.error(f"add_attribute failed: type={misp_type} value={value} err={e}")
+
+
 
     return added, skipped
 
