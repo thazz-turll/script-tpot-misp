@@ -48,9 +48,10 @@ MISP_EVENT_ID  = os.getenv("MISP_EVENT_ID")                        # cần khi A
 
 EVENT_DISTRIBUTION = int(os.getenv("MISP_DISTRIBUTION", "0"))
 EVENT_ANALYSIS     = int(os.getenv("MISP_ANALYSIS", "0"))
-THREAT_LEVEL_ID    = int(os.getenv("MISP_THREAT_LEVEL_ID", os.getenv("MISP_TLP", "2")))
+
+MISP_TAGS = [t.strip() for t in os.getenv("MISP_TAGS", "source:t-pot,tlp:amber").split(",") if t.strip()]
+
 EVENT_TITLE_PREFIX = os.getenv("EVENT_TITLE_PREFIX", "T-Pot IoC Collection")
-MISP_TAGS          = [t.strip() for t in os.getenv("MISP_TAGS", "source:t-pot,tlp:amber").split(",") if t.strip()]
 
 DISABLE_IDS_FOR_PRIVATE = os.getenv("DISABLE_IDS_FOR_PRIVATE_IP", "true").lower() == "true"
 TAG_PRIVATE_IP_ATTR     = os.getenv("TAG_PRIVATE_IP_ATTR", "false").lower() == "true"
@@ -309,7 +310,6 @@ def create_event(misp: PyMISP, title: str) -> str:
     ev.info            = title
     ev.distribution    = EVENT_DISTRIBUTION
     ev.analysis        = EVENT_ANALYSIS
-    ev.threat_level_id = THREAT_LEVEL_ID
 
     res = misp.add_event(ev)
 
