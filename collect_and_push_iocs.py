@@ -28,7 +28,6 @@ except Exception:
 ES_URL = os.getenv("ES_URL")                # bắt buộc
 MISP_URL = os.getenv("MISP_URL")            # bắt buộc
 MISP_KEY = os.getenv("MISP_KEY")            # bắt buộc
-EVENT_TITLE_PREFIX = os.getenv("EVENT_TITLE_PREFIX", "T-Pot IoC Collection")
 EVENT_TITLE_FORMAT = os.getenv("EVENT_TITLE_FORMAT", "%Y-%m-%d %H:%M")
 missing = []
 if not ES_URL:   missing.append("ES_URL")
@@ -171,43 +170,32 @@ ES_SOURCE_FIELDS = [
 
 def fetch_iocs_from_es():
     es = Elasticsearch([ES_URL])
-    # Sử dụng options() để đặt request_timeout và tránh cảnh báo deprecation
-    esq = es.options(request_timeout=60)
+    esq = es.options(request_timeout=60)  # timeout cho mỗi request
+
     now = datetime.now(timezone.utc)
     start = (now - relativedelta(hours=HOURS_LOOKBACK)).isoformat()
 
-    base_query = {
-        "_source": ES_SOURCE_FIELDS,
-        "sort": [
-            {"@timestamp": {"order": "desc", "unmapped_type": "date"}},
-            {"_id": {"order": "desc"}}
-        ],
-        "query": {"range": {"@timestamp": {"gte": start}}},
-        "track_total_hits": False
-    }
+    _source = ES_SOURCE_FIELDS
+    sort = [
+        {"@timestamp": {"order": "desc", "unmapped_type": "date"}},
+        {"_id": {"order": "desc"}}
+    ]
+    query = {"range": {"@timestamp": {"gte": start}}}
 
     page_size = 5000
     search_after = None
     all_hits = []
-    while True:
-        body = dict(base_query)
-        body["size"] = page_size
-        if search_after:
-            body["search_after"] = search_after
-        # Đưa track_total_hits vào body để tránh cảnh báo tham số trùng
-        body["track_total_hits"] = False
-        resp = esq.search(
-             index=ES_INDEX,
-             query=base_query["query"],
-             sort=base_query["sort"],
-             _source=base_query["_source"],
-             size=page_size,
-             search_after=search_after,
-             track_total_hits=base_query["track_total_hits"],
-             request_timeout=60
-        )
 
-        
+    while True:
+        resp = esq.search(
+            index=ES_INDEX,
+            query=query,
+            sort=sort,
+            _source=_source,
+            size=page_size,
+            search_after=search_after,
+            track_total_hits=False
+        )
         hits = resp.get("hits", {}).get("hits", [])
         if not hits:
             break
@@ -237,15 +225,17 @@ def fetch_iocs_from_es():
         # Hash: field chuyên dụng
         for fld in ["md5","sha1","sha256","sha512","hash"]:
             for val in many(s.get(fld)):
-                if not val: continue
+                if not val: 
+                    continue
                 v = str(val).strip()
                 if classify_hash(v):
                     ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "hash", "value": v})
 
-        # Hash trong text: ưu tiên có nhãn; nếu không có nhãn mới bắt hash trần
+        # Hash trong text (ưu tiên có nhãn)
         for fld in ["hashes","message"]:
             for val in many(s.get(fld)):
-                if not val: continue
+                if not val: 
+                    continue
                 text = str(val) or ""
                 labeled_found = False
                 for _, h in LABELED_HASH_RE.findall(text):
@@ -257,19 +247,29 @@ def fetch_iocs_from_es():
                         if classify_hash(h):
                             ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "hash", "value": h})
 
-        # URLs
+        # URL từ field URL (không regex lại trên chính v)
         for fld in ["url","http.url"]:
             for val in many(s.get(fld)):
-                if not val: continue
+                if not val: 
+                    continue
                 v = normalize_url(str(val))
                 if v:
                     ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "url", "value": v})
-                    
+
+        # URL ẩn trong message (tuỳ chọn, giữ nếu bạn muốn)
+        # for val in many(s.get("message")):
+        #     if not val:
+        #         continue
+        #     for m in URL_RE.findall(str(val)):
+        #         uurl = normalize_url(m)
+        #         if uurl:
+        #             ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "url", "value": uurl})
 
         # Domains / hostnames
         for fld in ["http.hostname","domain","dns.rrname"]:
             for val in many(s.get(fld)):
-                if not val: continue
+                if not val: 
+                    continue
                 v = normalize_domain(str(val))
                 if "." in v and " " not in v:
                     ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "domain", "value": v})
@@ -277,14 +277,16 @@ def fetch_iocs_from_es():
     df = pd.DataFrame(ioc_rows)
     if df.empty:
         return df
+
     keep_cols = [c for c in ["timestamp","src_ip","ioc_type","value"] if c in df.columns]
     df = (
         df[keep_cols]
-        .dropna(subset=["ioc_type","value"])\
-        .drop_duplicates(subset=["ioc_type","value"])\
+        .dropna(subset=["ioc_type","value"])
+        .drop_duplicates(subset=["ioc_type","value"])
         .reset_index(drop=True)
     )
     return df
+
 
 # ===== MISP mapping / push =====
 
