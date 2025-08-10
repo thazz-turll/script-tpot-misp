@@ -264,8 +264,7 @@ def fetch_iocs_from_es():
                 v = normalize_url(str(val))
                 if v:
                     ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "url", "value": v})
-                    for m in URL_RE.findall(v):
-                        ioc_rows.append({"timestamp": ts, "src_ip": src_ip, "ioc_type": "url", "value": normalize_url(m)})
+                    
 
         # Domains / hostnames
         for fld in ["http.hostname","domain","dns.rrname"]:
