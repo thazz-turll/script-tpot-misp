@@ -361,29 +361,30 @@ def create_daily_event_title():
 
 def create_event(misp: PyMISP, title: str) -> str:
     ev = MISPEvent()
-    ev.info            = title
-    ev.distribution    = EVENT_DISTRIBUTION
-    ev.analysis        = EVENT_ANALYSIS
+    ev.info         = title
+    ev.distribution = EVENT_DISTRIBUTION
+    ev.analysis     = EVENT_ANALYSIS
 
-    res = misp.add_event(ev)
+    # Trả về object để có id/uuid trực tiếp
+    res = misp.add_event(ev, pythonify=True)
 
-    # Lấy event_id đúng cách
-    event_id = None
+    # Lấy id/uuid an toàn
     try:
-        event_id = res["Event"]["id"]
-    except Exception:
-        event_id = getattr(res, "id", None)
-    if not event_id:
-        raise RuntimeError(f"Cannot create MISP event, unexpected response: {type(res)} {res}")
+        event_id = str(res.id)
+        event_uuid = str(res.uuid)
+    except Exception as e:
+        raise RuntimeError(f"Cannot create MISP event (no id/uuid): {type(res)} {res}")
 
-    # Gắn tag cho event (nếu có)
+    # Gắn tag cho event bằng UUID (ổn định hơn ID số)
     for t in MISP_TAGS:
         try:
-            misp.tag(event_id, t)
-        except Exception:
-            pass
+            misp.tag(event_uuid, t)
+            logger.info(f"TAG event {event_uuid} with '{t}'")
+        except Exception as e:
+            logger.error(f"Failed to tag event {event_uuid} with '{t}': {e}")
 
     return event_id
+
 
 
 def get_event_id(misp: PyMISP):
