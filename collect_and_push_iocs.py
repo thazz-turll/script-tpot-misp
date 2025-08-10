@@ -375,15 +375,20 @@ def create_event(misp: PyMISP, title: str) -> str:
     except Exception as e:
         raise RuntimeError(f"Cannot create MISP event (no id/uuid): {type(res)} {res}")
 
+    # Log cấu hình tag hiện tại để kiểm chứng
+    logger.info(f"MISP_TAGS configured: {MISP_TAGS}")
+
     # Gắn tag cho event bằng UUID (ổn định hơn ID số)
     for t in MISP_TAGS:
         try:
+            logger.info(f"TRY tag {event_uuid} with '{t}'")   # <— log kiểm chứng
             misp.tag(event_uuid, t)
             logger.info(f"TAG event {event_uuid} with '{t}'")
         except Exception as e:
             logger.error(f"Failed to tag event {event_uuid} with '{t}': {e}")
 
     return event_id
+
 
 
 
