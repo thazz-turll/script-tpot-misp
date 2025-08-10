@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
-from dateutil import parser
+from dateutil import parser as dtparser
 
 import pandas as pd
 from elasticsearch import Elasticsearch
@@ -88,6 +88,26 @@ MAPPING_BASE = {
 }
 
 # ===== Helpers =====
+def to_local_ts_str(ts_str: str) -> str:
+    if not ts_str:
+        return ""
+    try:
+        dt = dtparser.isoparse(ts_str)
+        if dt.tzinfo is None:                 # nếu chuỗi không có timezone
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")  # giờ local của máy
+    except Exception:
+        return ts_str
+
+def to_utc_iso(ts_str: str) -> str:
+    try:
+        dt = dtparser.isoparse(ts_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return ts_str
+
 def first(v):
     if isinstance(v, list) and v:
         return v[0]
@@ -264,15 +284,17 @@ def map_row_to_misp(row):
     ts_local_str = ts_str
     if ts_str:
         try:
-            # Parse từ dạng ISO (UTC) và đổi sang giờ local của server
-            dt_utc = parser.isoparse(ts_str).replace(tzinfo=timezone.utc)
-            dt_local = dt_utc.astimezone()  # sẽ lấy timezone của server (VN nếu đã set)
-            ts_local_str = dt_local.strftime("%Y-%m-%d %H:%M:%S %Z")
-        except Exception:
-            pass
+            ts_str = str(row.get("timestamp", "")).strip()
+            ts_local_str = to_local_ts_str(ts_str)
+            utc_iso = to_utc_iso(ts_str)
 
-    src = str(row.get("src_ip", "")).strip()
-    comment = "; ".join([x for x in [f"src_ip={src}" if src else "", f"ts={ts_local_str}" if ts_local_str else ""] if x])
+            src = str(row.get("src_ip", "")).strip()
+            comment_parts = []
+            if src: comment_parts.append(f"src_ip={src}")
+            if utc_iso: comment_parts.append(f"ts_utc={utc_iso}")
+            if ts_local_str: comment_parts.append(f"ts_local={ts_local_str}")
+            comment = "; ".join(comment_parts)
+
 
 
     if ioc_type == "hash":
