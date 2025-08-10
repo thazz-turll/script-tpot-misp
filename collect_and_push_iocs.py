@@ -178,8 +178,12 @@ def fetch_iocs_from_es():
 
     base_query = {
         "_source": ES_SOURCE_FIELDS,
-        "sort": [{"@timestamp": {"order": "desc", "unmapped_type": "date"}}],
-        "query": {"range": {"@timestamp": {"gte": start}}}
+        "sort": [
+            {"@timestamp": {"order": "desc", "unmapped_type": "date"}},
+            {"_id": {"order": "desc"}}
+        ],
+        "query": {"range": {"@timestamp": {"gte": start}}},
+        "track_total_hits": False
     }
 
     page_size = 5000
@@ -192,7 +196,18 @@ def fetch_iocs_from_es():
             body["search_after"] = search_after
         # Đưa track_total_hits vào body để tránh cảnh báo tham số trùng
         body["track_total_hits"] = False
-        resp = esq.search(index=ES_INDEX, body=body)
+        resp = esq.search(
+             index=ES_INDEX,
+             query=base_query["query"],
+             sort=base_query["sort"],
+             _source=base_query["_source"],
+             size=page_size,
+             search_after=search_after,
+             track_total_hits=base_query["track_total_hits"],
+             request_timeout=60
+        )
+
+        
         hits = resp.get("hits", {}).get("hits", [])
         if not hits:
             break
