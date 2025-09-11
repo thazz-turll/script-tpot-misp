@@ -55,7 +55,7 @@ EVENT_ANALYSIS     = int(os.getenv("MISP_ANALYSIS", "0"))
 MISP_TAGS = [t.strip() for t in os.getenv("MISP_TAGS", "source:t-pot,tlp:amber").split(",") if t.strip()]
 
 # Default a dedicated title prefix for this scenario; still overridable by env
-EVENT_TITLE_PREFIX = os.getenv("EVENT_TITLE_PREFIX", "Nmap Scan Detected")
+EVENT_TITLE_NMAP = os.getenv("EVENT_TITLE_NMAP", "Nmap Scan Detected")
 EVENT_TITLE_FORMAT = os.getenv("EVENT_TITLE_FORMAT", "%Y-%m-%d %H:%M")
 
 # Detection tuning
